@@ -1,6 +1,8 @@
 import discord
 import logging
 import sys
+import json
+import datetime
 
 logging.basicConfig(
     level=logging.INFO,
@@ -15,8 +17,6 @@ datafile = sys.argv[1]
 
 with open("token.ini", "r") as f:
     token = f.read()
-with open("user.ini", "r") as f:
-    target = f.read()
 
 client = discord.Client()
 
@@ -48,8 +48,10 @@ async def on_ready():
             count = 0
             async for msg in history:
                 count += 1
-                if msg.author.id == target:
-                    data.write(msg.clean_content+'\n')
+                msg_scrape = [datetime.datetime.strftime(msg.timestamp, '%Y%m%d%H%M%S'), msg.author.id, msg.clean_content]
+                #datetime.datetime.strptime(DATESTRING, '%Y%m%d%H%M%S')
+                json.dump(msg_scrape, data)
+                data.write('\n')
             save_progress(temp, chan.id, msg.id)
     await client.logout()
 
