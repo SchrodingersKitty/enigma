@@ -31,7 +31,7 @@ async def on_message(message):
     for mention in message.mentions:
         if mention.id == client.user.id:
             key = get_keyword(message)
-            if key in t:
+            if key and key in t:
                 reply = ""
                 while key not in reply:
                     reply = generate_message(t, s)
