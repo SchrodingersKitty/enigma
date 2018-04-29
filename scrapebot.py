@@ -2,8 +2,16 @@ import discord
 import logging
 import sys
 import json
-import datetime
+import argparse
+import traceback
+from datetime import datetime, date, time
 
+# deal with command line args
+arg_parser = argparse.ArgumentParser(description='Discord chat history scraper')
+arg_parser.add_argument('channel', type=str, help='channel name or id')
+args = arg_parser.parse_args()
+
+# set up logging
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(message)s",
@@ -12,47 +20,64 @@ logging.basicConfig(
         logging.StreamHandler(sys.stdout)
     ])
 log = logging.info
+err = logging.error
 
-datafile = sys.argv[1]
-
+# get bot token
 with open("token.ini", "r") as f:
     token = f.read()
 
+# initialize Discord client
 client = discord.Client()
 
-def load_progress(filename):
-    with open("temp.ini", "r+") as temp:
-        chan_id = temp.readline().strip()
-        msg_id = temp.readline().strip()
-    return chan_id, msg_id
-
-def save_progress(filename, chan_id, msg_id):
-    with open(filename, "w") as temp:
-        temp.write(chan_id)
-        temp.write('\n')
-        temp.write(msg_id)
+def get_last_timestamp(datafile):
+    """Return the last timestamp on file or the beginning of Discord epoch if none is found."""
+    line = ''
+    with open(datafile, 'r') as data:
+        # unwind to EOF
+        for line in data:
+            pass
+    if not line:
+        return datetime.combine(date(2015, 1, 1), time.min)
+    time_string = json.loads(line)[0]
+    timestamp = datetime.strptime(time_string, '%Y-%m-%d %H:%M:%S.%f')
+    return timestamp
 
 @client.event
 async def on_ready():
-    log("Connected as {}".format(client.user))
-    temp = "temp.ini"
-    chan_id, msg_id = load_progress(temp)
-    chan = client.get_channel(chan_id)
-    log("Beginning history scan of channel {}".format(chan.name))
-    with open(datafile, "a", 1, encoding="utf-8") as data:
-        msg = await client.get_message(chan, msg_id)
-        count = 100
-        while count > 1:
-            log("Getting history from {}".format(msg.timestamp))
-            history = client.logs_from(chan, limit=100, before=msg)
+    log("Logged in as {}".format(client.user))
+    # find channel
+    chan = None
+    for c in client.get_all_channels():
+        if c.id == args.channel or c.name == args.channel:
+            chan = client.get_channel(c.id)
+    if not chan:
+        err("Channel {} not found".format(args.channel))
+        await client.logout()
+        return
+    log("Beginning history scan of channel {} with id {}".format(chan.name, chan.id))
+    # touch channel data file
+    datafile = args.channel + '.json'
+    open(datafile, 'a').close()
+    # resume from last timestamp
+    timestamp = get_last_timestamp(datafile)
+    with open(datafile, 'a', 1) as data:
+        while True:
+            log("Getting history after {}".format(timestamp))
+            history = client.logs_from(chan, limit=500, after=timestamp, reverse=True)
             count = 0
             async for msg in history:
-                count += 1
-                msg_scrape = [datetime.datetime.strftime(msg.timestamp, '%Y%m%d%H%M%S'), msg.author.id, msg.clean_content]
-                #datetime.datetime.strptime(DATESTRING, '%Y%m%d%H%M%S')
+                timestamp = msg.timestamp
+                msg_scrape = [datetime.strftime(timestamp, '%Y-%m-%d %H:%M:%S.%f'), msg.author.id, msg.clean_content]
                 json.dump(msg_scrape, data)
                 data.write('\n')
-            save_progress(temp, chan.id, msg.id)
+                count += 1
+            if count == 0:
+                break
+    await client.logout()
+
+@client.event
+async def on_error(event, *args, **kwargs):
+    err(traceback.format_exc())
     await client.logout()
 
 client.run(token)

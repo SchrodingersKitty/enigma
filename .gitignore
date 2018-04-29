@@ -105,13 +105,10 @@ venv.bak/
 
 # VS Code
 .vscode/*
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
 
 # plain text data
 *.txt
 *.ini
+*.json
 
 # other data
